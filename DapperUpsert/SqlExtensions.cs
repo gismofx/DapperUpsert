@@ -13,6 +13,8 @@ namespace Dapper.Contrib.Extensions.Upsert
 {
     public static partial class SqlExtensions
     {
+        //Todo: Add MSsql and PostgreSQL support
+        
         /// <summary>
         /// Generic Upsert records in database. If record exists based on Primary key matching, ALL of the records columns/fields will be updated.
         /// If no key exists, the record will be added.
@@ -317,7 +319,7 @@ namespace Dapper.Contrib.Extensions.Upsert
             return await db.ReplaceInto(tableName, columns, inserts, dynamicParams, transaction, commandTimeout);
         }
 
-        //Todo: Fix and test this
+        //Todo: Fix and test Bulk Insert - Later
         private static async Task BulkInsert(IDbConnection db, dynamic records, string intoTableName)
         {
             var SqlSb = new StringBuilder($"INSERT INTO {intoTableName} (");
@@ -351,7 +353,6 @@ namespace Dapper.Contrib.Extensions.Upsert
             var result = await db.ExecuteAsync(SqlSb.ToString());
             //return; Task.FromResult(0);
         }
-        //Todo: Fix this bulk update
         private static async Task BulkUpdate(IDbConnection db, List<string> columns, string tableToUpdate, string tempTableName)
         {
             var sb = new StringBuilder();
