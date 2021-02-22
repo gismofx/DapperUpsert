@@ -59,4 +59,5 @@ var upsertResult = await RemoteDB.UpsertAsync(tableName, columnsToSync, myRecord
 - Add Additional Database Support
 - Add Tests for the private methods used
 - Add Bulk Update
+- Publish NuGet Package
 
