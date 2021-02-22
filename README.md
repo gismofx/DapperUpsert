@@ -1,4 +1,5 @@
 # DapperUpsert
+**NetStandard2.0 Library**
 **Extension Methods for Easy Async UPSERT using Dapper and Dapper.Contrib**
 
 ## Usage
