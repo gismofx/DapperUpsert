@@ -2,7 +2,7 @@
 **Extension Methods for Easy Async UPSERT using Dapper and Dapper.Contrib**
 
 ## Usage
-This library extends IDBConnection in the same fashion that Dapper and Dapper.Contrib do. If you're using the Generic method, you must adorn your POCO class with the attributes specified in Dapper.Contrib
+This library extends IDBConnection in the same fashion that Dapper and Dapper.Contrib do. If requires using attributes on your POCO classes specified in Dapper.Contrib
 
 [Dapper.Contrib](https://github.com/StackExchange/Dapper/tree/main/Dapper.Contrib)
 
