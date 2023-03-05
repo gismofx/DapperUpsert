@@ -59,6 +59,18 @@ namespace Dapper.Contrib.Extensions.Upsert
         }
 
 
+        /// <summary>
+        /// Upsert - Insert or Update records if primary key exists
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="db"></param>
+        /// <param name="entitiesToUpsert"></param>
+        /// <param name="chunkSize"></param>
+        /// <param name="transaction"></param>
+        /// <param name="commandTimeout"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        /// <exception cref="Exception"></exception>
         public static async Task<int> UpsertAsync<T>(this IDbConnection db,
                                                      IEnumerable<T> entitiesToUpsert,
                                                      int chunkSize = 1000,
@@ -94,62 +106,6 @@ namespace Dapper.Contrib.Extensions.Upsert
 
         }
 
-        /// <summary>
-        /// Generic Upsert records in database. If record exists based on Primary key matching, ALL of the records columns/fields will be updated.
-        /// If no key exists, the record will be added.
-        /// </summary>
-        /// <typeparam name="T">Dapper.Contrib POCO class with correct attributes(Key, etc) Maybe be a single or generic IEnumerable </typeparam>
-        /// <param name="db">The database</param>
-        /// <param name="entitiesToUpsert">Single or generic IEnumerable entites to Upsert</param>
-        /// <param name="transaction">Specify a transaction if required</param>
-        /// <param name="commandTimeout">Seconds</param>
-        /// <returns>Number of records affected</returns>
-        [Obsolete("Use Generic Method", true)]
-        //public static async Task<int> UpsertAsync<T>(this IDbConnection db,
-        //                                             T entitiesToUpsert,
-        //                                             IDbTransaction transaction = null,
-        //                                             int? commandTimeout = null) where T : class
-        //{
-        //    var contribType = typeof(SqlMapperExtensions);
-
-        //    var type = typeof(T);
-
-        //    var isList = false;
-        //    if (type.IsArray)
-        //    {
-        //        type = type.GetElementType();
-        //        isList = true;
-        //    }
-        //    else if (type.IsGenericType)
-        //    {
-        //        var typeInfo = type.GetTypeInfo();
-        //        bool implementsGenericIEnumerableOrIsGenericIEnumerable =
-        //            typeInfo.ImplementedInterfaces.Any(ti => ti.IsGenericType && ti.GetGenericTypeDefinition() == typeof(IEnumerable<>)) ||
-        //            typeInfo.GetGenericTypeDefinition() == typeof(IEnumerable<>);
-
-        //        if (implementsGenericIEnumerableOrIsGenericIEnumerable)
-        //        {
-        //            type = type.GetGenericArguments()[0];
-        //            isList = true;
-        //        }
-
-        //    }
-
-        //    IEnumerable entities = null;
-        //    if (!isList)
-        //    {
-        //        var listType = typeof(List<>);
-        //        var constructedListType = listType.MakeGenericType(type);
-        //        var instance = Activator.CreateInstance(constructedListType) as IList;
-        //        instance.Add(entitiesToUpsert);
-        //        entities = instance;
-        //    }
-        //    else
-        //    {
-        //        entities = entitiesToUpsert as IEnumerable;
-        //    }
-
-
         //    var tableName = contribType.GetTableName(type); //GetTableName
         //    var sbColumnList = new StringBuilder(null);
         //    var allProperties = contribType.TypePropertiesCache(type); //TypePropertiesCache(type);
@@ -168,56 +124,8 @@ namespace Dapper.Contrib.Extensions.Upsert
 
         //    var columns = allPropertiesExceptComputed.Select(x => x.Name).ToList();
 
-        //    var dbConnectionType = db.GetType().Name;
-        //    int result;
-        //    switch (dbConnectionType)
-        //    {
-        //        case "SQLiteConnection":
-        //            result = await db.ReplaceInto<T>(tableName, columns, entities, transaction, commandTimeout);
-        //            break;
-        //        case "MySqlConnection":
-        //            result = await db.MySQLUpsert<T>(tableName, columns, entities, transaction, commandTimeout);
-        //            break;
-        //        default:
-        //            throw new Exception($"No method found for database type: {dbConnectionType}");
-        //    }
-        //    return result;
-        //}
 
-        /// <summary>
-        /// Upsert records in database. If record exists based on Primary key matching, ALL of the records columns/fields will be updated.
-        /// If no key exists, the record will be added.
-        /// </summary>
-        /// <param name="db">The database to upsert</param>
-        /// <param name="tableName">Name of the Table</param>
-        /// <param name="columns">Columns in the database</param>
-        /// <param name="records">IEnumerable of the records to Upsert</param>
-        /// <param name="transaction">Specify a transaction is required</param>
-        /// <param name="commandTimeout">Seconds</param>
-        /// <returns></returns>
-        //private static async Task<int> UpsertAsync(this IDbConnection db,
-        //                                          string tableName,
-        //                                          IEnumerable<string> columns,
-        //                                          IEnumerable<dynamic> records,
-        //                                          IDbTransaction transaction = null,
-        //                                          int? commandTimeout = null)
-        //{
-        //    var dbConnectionType = db.GetType().Name;
-        //    int result;
-        //    switch (dbConnectionType)
-        //    {
-        //        case "SQLiteConnection":
-        //            result = await db.ReplaceInto(tableName, columns, records, transaction, commandTimeout);
-        //            break;
-        //        case "MySqlConnection":
-        //            result = await db.MySQLUpsert(tableName, columns, re, transaction, commandTimeout);
-        //            break;
-        //        default:
-        //            throw new Exception($"No method found for database type: {dbConnectionType}");
-        //    }
-        //    return result;
-        //}
-
+        //ToDo: BulkUpdate Using Temporary Table
         private static async Task BulkUpdate(IDbConnection db,
                                              List<string> columns,
                                              string tableToUpdate,
@@ -264,6 +172,7 @@ namespace Dapper.Contrib.Extensions.Upsert
             var allPropertiesExceptKeyAndComputed = allProperties.Except(keyProperties.Union(computedProperties)).ToList();
             return allPropertiesExceptKeyAndComputed;
         }
+        
         /// <summary>
         /// Get the type. If the type is IEnumerable, get the containing type
         /// </summary>
@@ -287,25 +196,6 @@ namespace Dapper.Contrib.Extensions.Upsert
 
             }
             return type;
-        }
-
-        private static async Task<int> MySQLUpsert(this IDbConnection db,
-                                                   string tableName,
-                                                   IEnumerable<string> columns,
-                                                   List<string> parameterizedValues,
-                                                   DynamicParameters parameters,
-                                                   IDbTransaction transaction = null,
-                                                   int? commandTimeout = null)
-        {
-            var newList = new List<string>();
-
-            foreach (var c in columns)
-            {
-                newList.Add($"{c} = VALUES({c})");
-            }
-
-            var cmd = $"INSERT INTO {tableName} ({String.Join(",", columns)}) VALUES {String.Join(",", parameterizedValues)} ON DUPLICATE KEY UPDATE {String.Join(",", newList)}";
-            return await db.ExecuteAsync(cmd, parameters, transaction, commandTimeout);
         }
 
 
@@ -346,8 +236,6 @@ namespace Dapper.Contrib.Extensions.Upsert
                 result += await db.ExecuteAsync(cmd, upsertParameters.DynamicParams, transaction, commandTimeout);
             }
             return result;
-
-            //return await db.MySQLUpsert(tableName, columns, items, dynamicParams, transaction, commandTimeout);
         }
 
         private static async Task<int> ReplaceInto(this IDbConnection db,
