@@ -1,10 +1,11 @@
 # DapperUpsert
+**NetStandard2.0 Library**
 **Extension Methods for Easy Async UPSERT using Dapper and Dapper.Contrib**
 
 ## Usage
-This library extends IDBConnection in the same fashion that Dapper and Dapper.Contrib do. If requires using attributes on your POCO classes specified in Dapper.Contrib
+This library extends `IDBConnection` in the same fashion that Dapper and Dapper.Contrib do. If requires using attributes on your POCO classes specified in Dapper.Contrib
 
-[Dapper.Contrib](https://github.com/StackExchange/Dapper/tree/main/Dapper.Contrib)
+[Dapper.Contrib](https://github.com/DapperLib/Dapper.Contrib)
 
 ### Limitations
 This currently works with SQLite and MYsql/MariaDB databases. MSsql and PostgreSQL are in the works, but will accept pull requests
