@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageProjectUrl>https://github.com/gismofx/DapperUpsert</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/gismofx/DapperUpsert</RepositoryUrl>
+    <PackageTags>c# dapper sql netcore upsert</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
