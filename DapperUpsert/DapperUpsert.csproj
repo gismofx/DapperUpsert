@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
@@ -11,5 +11,9 @@
     <PackageReference Include="Dapper" Version="[2.*,3)" />
     <PackageReference Include="Dapper.Contrib" Version="[2.*,3)" />
   </ItemGroup>
+	
+    <PropertyGroup>
+        <LangVersion>latest</LangVersion>
+    </PropertyGroup>
 
 </Project>

@@ -1,62 +1,56 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using Dapper;
-using System.Threading.Tasks;
-using System.Data;
-using System.Reflection;
-using System.Linq;
-using Dapper.Contrib.Extensions;
 using System.Collections;
-using System.Drawing;
-using System.Data.Common;
-using System.Runtime.CompilerServices;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using System.Threading.Tasks;
+using System.Transactions;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Dapper.Contrib.Extensions.Upsert
 {
     public static partial class SqlExtensions
     {
-        //Todo: Add MSsql and PostgreSQL support
 
         /// <summary>
-        /// Insert Multiple Records in one execution.
-        /// Chunk size will limit how many records are included in a single statement
+        /// 
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="db"></param>
-        /// <param name="entitiesToInsert"></param>
+        /// <example>
+        /// INSERT INTO test1 (a, b, c) 
+        /// SELECT t.a as a, t.b as b, t.c AS c FROM test2 AS t
+        /// ON DUPLICATE KEY UPDATE c = t.c;
+        /// </example>
+        /// <param name="dbConnection"></param>
+        /// <param name="columns"></param>
+        /// <param name="tempTableName"></param>
+        /// <param name="toTableName"></param>
         /// <param name="transaction"></param>
         /// <param name="commandTimeout"></param>
-        /// <returns></returns>
-        public static async Task<int> BulkInsertAsync<T>(this IDbConnection db,
-                                                       IEnumerable<T> entitiesToInsert,
-                                                       int chunkSize = 1000,
-                                                       IDbTransaction transaction = null,
-                                                       int? commandTimeout = null)
+        /// <returns>Quantity of affected records</returns>
+        private static async Task<int> MySqlUpsertFromTable(this IDbConnection dbConnection,
+                                                               IEnumerable<string> columns,
+                                                               string tempTableName,
+                                                               string toTableName,
+                                                               IDbTransaction transaction = null,
+                                                               int? commandTimeout = null)
         {
-            var contribType = typeof(SqlMapperExtensions);
-            var tableName = contribType.GetTableName(typeof(T));
-            var columnsProperties = GetAllColumns<T>();
-            var columns = columnsProperties.Select(x => x.Name);
-
-            //Setup the statement
-            var SqlSb = new StringBuilder($"INSERT INTO {tableName} ");
-            SqlSb.AppendLine($"({string.Join(",", columns)}) VALUES");
-
-            BuildInsertParameters(columns, entitiesToInsert);
-
-            var entityType = typeof(T);
-            //var valueSb = new StringBuilder();
-            int result = 0;
-            foreach (var entityChunk in entitiesToInsert.Chunk2(1000))
+            var vList = new List<string>();
+            foreach (var c in columns)
             {
-                var bulkInsertSb = new StringBuilder(SqlSb.ToString());
-                var insertParams = BuildInsertParameters(columns, entityChunk);
-                bulkInsertSb.AppendLine(string.Join(",", insertParams.ParameterizedInsertValues));
-                result += await db.ExecuteAsync(bulkInsertSb.ToString(), insertParams.DynamicParams, transaction, commandTimeout);
+                vList.Add($"{c} = VALUES({c})");
             }
-            return result;
+
+            var sb = new StringBuilder();
+            sb.Append($"INSERT INTO {toTableName} ");
+            sb.AppendLine($"({string.Join(",", columns)})");
+            sb.AppendLine($"Select * from {tempTableName}");
+            sb.AppendLine($"ON DUPLICATE KEY UPDATE {string.Join(",", vList)}");
+            return await dbConnection.ExecuteAsync(sb.ToString(), transaction: transaction, commandTimeout: commandTimeout);
         }
+
+
 
 
         /// <summary>
@@ -72,14 +66,15 @@ namespace Dapper.Contrib.Extensions.Upsert
         /// <exception cref="ArgumentException"></exception>
         /// <exception cref="Exception"></exception>
         public static async Task<int> UpsertAsync<T>(this IDbConnection db,
-                                                     IEnumerable<T> entitiesToUpsert,
-                                                     int chunkSize = 1000,
-                                                     IDbTransaction transaction = null,
-                                                     int? commandTimeout = null)
+                                                    IEnumerable<T> entitiesToUpsert,
+                                                    int chunkSize = 1000,
+                                                    IDbTransaction transaction = null,
+                                                    int? commandTimeout = null,
+                                                    string tableName = null)
         {
             var type = typeof(T);
             var contribType = typeof(SqlMapperExtensions);
-            var tableName = contribType.GetTableName(type);
+            tableName = tableName ?? contribType.GetTableName(type);
             var columnsProperties = GetAllColumns<T>();
             var columns = columnsProperties.Select(x => x.Name);
 
@@ -92,6 +87,7 @@ namespace Dapper.Contrib.Extensions.Upsert
             int result;
             switch (dbConnectionType)
             {
+                case "SqliteConnection":
                 case "SQLiteConnection":
                     result = await db.ReplaceInto<T>(tableName, columns, entitiesToUpsert, transaction, commandTimeout);
                     break;
@@ -99,71 +95,145 @@ namespace Dapper.Contrib.Extensions.Upsert
                     result = await db.MySQLUpsertAsync<T>(entitiesToUpsert, columns, tableName, chunkSize, transaction, commandTimeout);
                     break;
                 default:
-                    throw new Exception($"No method found for database type: {dbConnectionType}");
+                    throw new Exception($"No UPSERT method found for database type: {dbConnectionType}");
             }
             return result;
 
-
         }
 
-        //    var tableName = contribType.GetTableName(type); //GetTableName
-        //    var sbColumnList = new StringBuilder(null);
-        //    var allProperties = contribType.TypePropertiesCache(type); //TypePropertiesCache(type);
-        //    var keyProperties = contribType.KeyPropertiesCache(type);// KeyPropertiesCache(type).ToList();
-        //    var computedProperties = contribType.ComputedPropertiesCache(type);// ComputedPropertiesCache(type);
-        //    var allPropertiesExceptKeyAndComputed = allProperties.Except(keyProperties.Union(computedProperties)).ToList();
-
-        //    //added need to include key column for upsert
-        //    var allPropertiesExceptComputed = allProperties.Except(computedProperties).ToList();
-
-        //    var explicitKeyProperties = contribType.ExplicitKeyPropertiesCache(type); // ExplicitKeyPropertiesCache(type);
-        //    if (keyProperties.Count == 0 && explicitKeyProperties.Count == 0)
-        //        throw new ArgumentException("Entity must have at least one [Key] or [ExplicitKey] property");
-
-        //    keyProperties.AddRange(explicitKeyProperties);
-
-        //    var columns = allPropertiesExceptComputed.Select(x => x.Name).ToList();
-
-
-        //ToDo: BulkUpdate Using Temporary Table
-        private static async Task BulkUpdate(IDbConnection db,
-                                             List<string> columns,
-                                             string tableToUpdate,
-                                             string tempTableName)
+        /// <summary>
+        /// Data is already staged in a temporary table and the data needs to be upserted from
+        /// the temp table to the main main
+        /// </summary>
+        /// <param name="db"></param>
+        /// <param name="columns"></param>
+        /// <param name="tempTableName"></param>
+        /// <param name="toTableName"></param>
+        /// <param name="chunkSize"></param>
+        /// <param name="transaction"></param>
+        /// <param name="commandTimeout"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
+        public static async Task<int> UpsertFromTempTableAysnc(this IDbConnection db,
+                                                    IEnumerable<string> columns,
+                                                    string tempTableName,
+                                                    string toTableName,
+                                                    int chunkSize = 1000,
+                                                    IDbTransaction transaction = null,
+                                                    int? commandTimeout = null)
         {
-            var sb = new StringBuilder();
-            sb.Append($"UPDATE {tableToUpdate} as O SET ");
-            var columnEqualList = new List<string>();
-            foreach (var c in columns)
+            var dbConnectionType = db.GetType().Name;
+
+            int result;
+            switch (dbConnectionType)
             {
-                columnEqualList.Add($"O.{c} = N.{c}");
+                case "SqliteConnection":
+                case "SQLiteConnection":
+                    throw new Exception($"No UPSERT method found for database type: {dbConnectionType}");
+                    //result = await db.ReplaceInto<T>(tableName, columns, entitiesToUpsert, transaction, commandTimeout);
+                    break;
+                case "MySqlConnection":
+                    result = await db.MySqlUpsertFromTable(columns, tempTableName, toTableName, transaction, commandTimeout);// entitiesToUpsert, columns, tableName, chunkSize, transaction, commandTimeout);
+                    break;
+                default:
+                    throw new Exception($"No UPSERT method found for database type: {dbConnectionType}");
             }
-            sb.Append(string.Join(",", columnEqualList));
-            sb.Append($" FROM O INNER JOIN {tempTableName} as N ON O.Id=N.Id");
-            var result = await db.ExecuteAsync(sb.ToString());
+            return result;
         }
 
+
+
+        /// <summary>
+        /// Data is already staged in a temporary table and the data needs to be upserted from
+        /// the temp table to the main main
+        /// </summary>
+        /// <param name="db"></param>
+        /// <param name="entityModelClass"></param>
+        /// <param name="tempTableName"></param>
+        /// <param name="chunkSize"></param>
+        /// <param name="transaction"></param>
+        /// <param name="commandTimeout"></param>
+        /// <param name="toTableName"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        public static async Task<int> UpsertFromTempTableAysnc(this IDbConnection db,
+                                                    Type entityModelClass,
+                                                    string tempTableName,
+                                                    int chunkSize = 1000,
+                                                    IDbTransaction transaction = null,
+                                                    int? commandTimeout = null,
+                                                    string toTableName = null)
+        {
+            var type = entityModelClass;
+            var contribType = typeof(SqlMapperExtensions);
+            toTableName = toTableName ?? contribType.GetTableName(type);
+
+            var columnsProperties = GetAllColumns(type);
+            var columns = columnsProperties.Select(x => x.Name);
+
+            var explicitKeyProperties = contribType.ExplicitKeyPropertiesCache(type);
+            var keyProperties = contribType.KeyPropertiesCache(type);
+            if (keyProperties.Count == 0 && explicitKeyProperties.Count == 0)
+                throw new ArgumentException("Entity must have at least one [Key] or [ExplicitKey] property");
+
+            return await db.UpsertFromTempTableAysnc(columns: columns,
+                                              tempTableName: tempTableName,
+                                              toTableName: toTableName,
+                                              chunkSize: chunkSize,
+                                              transaction: transaction,
+                                              commandTimeout: commandTimeout);
+        }
+
+        /// <summary>
+        /// Data is already staged in a temporary table and the data needs to be upserted from
+        /// the temp table to the main main
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="db"></param>
+        /// <param name="tempTableName"></param>
+        /// <param name="chunkSize"></param>
+        /// <param name="transaction"></param>
+        /// <param name="commandTimeout"></param>
+        /// <param name="toTableName"></param>
+        /// <returns></returns>
+        public static async Task<int> UpsertFromTempTableAysnc<T>(this IDbConnection db,
+                                                    string tempTableName,
+                                                    int chunkSize = 1000,
+                                                    IDbTransaction transaction = null,
+                                                    int? commandTimeout = null,
+                                                    string toTableName = null)
+        {
+            var type = typeof(T);
+            return await db.UpsertFromTempTableAysnc(type, tempTableName, chunkSize, transaction, commandTimeout, toTableName);
+        }
+
+        /// <summary>
+        /// Create a "temporary" table based on an existing table 
+        /// </summary>
+        /// <param name="db"></param>
+        /// <param name="localTableName"></param>
+        /// <returns>Uniquely named table</returns>
         private static async Task<string> CreateTempTable(IDbConnection db, string localTableName)
         {
             var tempTableName = localTableName + Guid.NewGuid().ToString("N");
             var create = $"CREATE TABLE {tempTableName} AS SELECT * FROM {localTableName} WHERE 0";
             await db.ExecuteAsync(create);
-            return tempTableName;// Task.FromResult(tempTableName);
+            return tempTableName;
         }
 
+        /// <summary>
+        /// Drop a table
+        /// </summary>
+        /// <param name="db"></param>
+        /// <param name="tableName"></param>
+        /// <returns></returns>
         private static async Task DropTable(IDbConnection db, string tableName)
         {
-            if (string.IsNullOrEmpty(tableName))
-            {
-                return;
-            }
             await db.ExecuteAsync($"DROP TABLE {tableName}");
-            //return Task.FromResult(0);
         }
 
-        private static List<PropertyInfo> GetAllColumns<T>()
+        private static List<PropertyInfo> GetAllColumns(Type type)
         {
-            var type = typeof(T);
             var contribType = typeof(SqlMapperExtensions);
 
             var allProperties = contribType.TypePropertiesCache(type);
@@ -172,7 +242,13 @@ namespace Dapper.Contrib.Extensions.Upsert
             var allPropertiesExceptKeyAndComputed = allProperties.Except(keyProperties.Union(computedProperties)).ToList();
             return allPropertiesExceptKeyAndComputed;
         }
-        
+
+        private static List<PropertyInfo> GetAllColumns<T>()
+        {
+            var type = typeof(T);
+            return GetAllColumns(type);
+        }
+
         /// <summary>
         /// Get the type. If the type is IEnumerable, get the containing type
         /// </summary>
@@ -220,11 +296,11 @@ namespace Dapper.Contrib.Extensions.Upsert
                                                    IDbTransaction transaction = null,
                                                    int? commandTimeout = null)
         {
-            int result = 0;       
-            
+            int result = 0;
+
             foreach (var entityChunk in entitiesToUpsert.Chunk2(1000))
             {
-                var upsertParameters = BuildInsertParameters(columns, entitiesToUpsert);
+                var upsertParameters = BuildInsertParameters(columns, entityChunk);
                 var newList = new List<string>();
 
                 foreach (var c in columns)
@@ -335,6 +411,131 @@ namespace Dapper.Contrib.Extensions.Upsert
             }
             return (dynamicParams, valueList);
         }
-    }
 
+
+        //Todo: Add MSsql and PostgreSQL support
+
+        /// <summary>
+        /// Insert Multiple Records in one execution.
+        /// Chunk size will limit how many records are included in a single statement
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="db"></param>
+        /// <param name="entitiesToInsert"></param>
+        /// <param name="transaction"></param>
+        /// <param name="commandTimeout"></param>
+        /// <returns></returns>
+        public static async Task<int> BulkInsertAsync<T>(this IDbConnection db,
+                                                       IEnumerable<T> entitiesToInsert,
+                                                       int chunkSize = 1000,
+                                                       IDbTransaction transaction = null,
+                                                       int? commandTimeout = null)
+        {
+            var contribType = typeof(SqlMapperExtensions);
+            var tableName = contribType.GetTableName(typeof(T));
+            var columnsProperties = GetAllColumns<T>();
+            var columns = columnsProperties.Select(x => x.Name);
+
+            //Setup the statement
+            var SqlSb = new StringBuilder($"INSERT INTO {tableName} ");
+            SqlSb.AppendLine($"({string.Join(",", columns)}) VALUES");
+
+            BuildInsertParameters(columns, entitiesToInsert);
+
+            var entityType = typeof(T);
+            //var valueSb = new StringBuilder();
+            int result = 0;
+            foreach (var entityChunk in entitiesToInsert.Chunk2(1000))
+            {
+                var bulkInsertSb = new StringBuilder(SqlSb.ToString());
+                var insertParams = BuildInsertParameters(columns, entityChunk);
+                bulkInsertSb.AppendLine(string.Join(",", insertParams.ParameterizedInsertValues));
+                result += await db.ExecuteAsync(bulkInsertSb.ToString(), insertParams.DynamicParams, transaction, commandTimeout);
+            }
+            return result;
+        }
+
+
+    }
 }
+
+//    var tableName = contribType.GetTableName(type); //GetTableName
+//    var sbColumnList = new StringBuilder(null);
+//    var allProperties = contribType.TypePropertiesCache(type); //TypePropertiesCache(type);
+//    var keyProperties = contribType.KeyPropertiesCache(type);// KeyPropertiesCache(type).ToList();
+//    var computedProperties = contribType.ComputedPropertiesCache(type);// ComputedPropertiesCache(type);
+//    var allPropertiesExceptKeyAndComputed = allProperties.Except(keyProperties.Union(computedProperties)).ToList();
+
+//    //added need to include key column for upsert
+//    var allPropertiesExceptComputed = allProperties.Except(computedProperties).ToList();
+
+//    var explicitKeyProperties = contribType.ExplicitKeyPropertiesCache(type); // ExplicitKeyPropertiesCache(type);
+//    if (keyProperties.Count == 0 && explicitKeyProperties.Count == 0)
+//        throw new ArgumentException("Entity must have at least one [Key] or [ExplicitKey] property");
+
+//    keyProperties.AddRange(explicitKeyProperties);
+
+//    var columns = allPropertiesExceptComputed.Select(x => x.Name).ToList();
+
+/*
+//ToDo: BulkUpdate Using Temporary Table
+private static async Task BulkUpdate(IDbConnection db,
+                                     List<string> columns,
+                                     string tableToUpdate,
+                                     string tempTableName)
+{
+    var sb = new StringBuilder();
+    sb.Append($"UPDATE {tableToUpdate} as O SET ");
+    var columnEqualList = new List<string>();
+    foreach (var c in columns)
+    {
+        columnEqualList.Add($"O.{c} = N.{c}");
+    }
+    sb.Append(string.Join(",", columnEqualList));
+    sb.Append($" FROM O INNER JOIN {tempTableName} as N ON O.Id=N.Id");
+    var result = await db.ExecuteAsync(sb.ToString());
+}
+*/
+
+//Todo: Add MSsql and PostgreSQL support
+/*
+/// <summary>
+/// Insert Multiple Records in one execution.
+/// Chunk size will limit how many records are included in a single statement
+/// </summary>
+/// <typeparam name="T"></typeparam>
+/// <param name="db"></param>
+/// <param name="entitiesToInsert"></param>
+/// <param name="transaction"></param>
+/// <param name="commandTimeout"></param>
+/// <returns></returns>
+public static async Task<int> BulkInsertAsync<T>(this IDbConnection db,
+                                               IEnumerable<T> entitiesToInsert,
+                                               int chunkSize = 1000,
+                                               IDbTransaction transaction = null,
+                                               int? commandTimeout = null)
+{
+    var contribType = typeof(SqlMapperExtensions);
+    var tableName = contribType.GetTableName(typeof(T));
+    var columnsProperties = GetAllColumns<T>();
+    var columns = columnsProperties.Select(x => x.Name);
+
+    //Setup the statement
+    var SqlSb = new StringBuilder($"INSERT INTO {tableName} ");
+    SqlSb.AppendLine($"({string.Join(",", columns)}) VALUES");
+
+    BuildInsertParameters(columns, entitiesToInsert);
+
+    var entityType = typeof(T);
+    //var valueSb = new StringBuilder();
+    int result = 0;
+    foreach (var entityChunk in entitiesToInsert.Chunk2(1000))
+    {
+        var bulkInsertSb = new StringBuilder(SqlSb.ToString());
+        var insertParams = BuildInsertParameters(columns, entityChunk);
+        bulkInsertSb.AppendLine(string.Join(",", insertParams.ParameterizedInsertValues));
+        result += await db.ExecuteAsync(bulkInsertSb.ToString(), insertParams.DynamicParams, transaction, commandTimeout);
+    }
+    return result;
+}
+*/
