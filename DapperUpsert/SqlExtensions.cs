@@ -45,7 +45,7 @@ namespace Dapper.Contrib.Extensions.Upsert
             var sb = new StringBuilder();
             sb.Append($"INSERT INTO {toTableName} ");
             sb.AppendLine($"({string.Join(",", columns)})");
-            sb.AppendLine($"Select * from {tempTableName}");
+            sb.AppendLine($"Select {string.Join(",",columns)} from {tempTableName}");
             sb.AppendLine($"ON DUPLICATE KEY UPDATE {string.Join(",", vList)}");
             return await dbConnection.ExecuteAsync(sb.ToString(), transaction: transaction, commandTimeout: commandTimeout);
         }
