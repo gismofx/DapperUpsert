@@ -429,10 +429,11 @@ namespace Dapper.Contrib.Extensions.Upsert
                                                        IEnumerable<T> entitiesToInsert,
                                                        int chunkSize = 1000,
                                                        IDbTransaction transaction = null,
-                                                       int? commandTimeout = null)
+                                                       int? commandTimeout = null,
+                                                       string tableNameOverride = null)
         {
             var contribType = typeof(SqlMapperExtensions);
-            var tableName = contribType.GetTableName(typeof(T));
+            var tableName = tableNameOverride ?? contribType.GetTableName(typeof(T));
             var columnsProperties = GetAllColumns<T>();
             var columns = columnsProperties.Select(x => x.Name);
 
@@ -445,7 +446,7 @@ namespace Dapper.Contrib.Extensions.Upsert
             var entityType = typeof(T);
             //var valueSb = new StringBuilder();
             int result = 0;
-            foreach (var entityChunk in entitiesToInsert.Chunk2(1000))
+            foreach (var entityChunk in entitiesToInsert.Chunk2(chunkSize))
             {
                 var bulkInsertSb = new StringBuilder(SqlSb.ToString());
                 var insertParams = BuildInsertParameters(columns, entityChunk);
